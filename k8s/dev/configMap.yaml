@@ -1,0 +1,11 @@
+---
+apiVersion: v1
+data:
+  ADAPTER_IMAP_HOST: 10.18.104.12
+  ADAPTER_IMAP_PORT: "143"
+  ADAPTER_SMTP_HOST: 10.18.104.12
+  ADAPTER_SMTP_PORT: "25"
+kind: ConfigMap
+metadata:
+  name: adapter
+  namespace: email-dev

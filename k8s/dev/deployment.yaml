@@ -1,0 +1,30 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: adapter
+  name: adapter
+  namespace: email-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: adapter
+  template:
+    metadata:
+      labels:
+        app: adapter
+      namespace: email-dev
+    spec:
+      containers:
+      - envFrom:
+        - configMapRef:
+            name: adapter
+        image: {your_image}
+        imagePullPolicy: Always
+        name: adapter
+        ports:
+        - containerPort: 8000
+          name: http-8000
+          protocol: TCP

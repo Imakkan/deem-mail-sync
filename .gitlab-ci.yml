@@ -1,0 +1,87 @@
+stages:
+  - build
+  - test
+  - quality
+  - docker-build
+  - deploy
+
+image: python:3.8
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+build:
+  stage: build
+  only:
+    refs:
+      - master
+      - merge_requests
+  before_script:
+    - pip install virtualenv
+    - virtualenv venv
+    - source venv/bin/activate
+  script:
+    - pip install -r requirements.txt
+
+test:
+  stage: test
+  artifacts:
+    paths:
+      - coverage.xml
+  only:
+    refs:
+      - master
+      - merge_requests
+  before_script:
+    - pip install virtualenv
+    - virtualenv venv
+    - source venv/bin/activate
+    - pip install -r requirements.txt
+  script:
+    - python -m pycodestyle --exclude=./venv/
+    - python -m coverage run -m pytest
+    - python -m coverage xml
+
+quality:
+  image:
+    name: sonarsource/sonar-scanner-cli:latest
+    entrypoint: [""]
+  stage: quality
+  dependencies:
+    - test
+  only:
+    refs:
+      - master
+      - merge_requests
+  script:
+    - sonar-scanner
+
+push to registry:
+  stage: docker-build
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [ "" ]
+  variables:
+    IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+  only:
+    refs:
+      - master
+  script:
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+    - /kaniko/executor --context $CI_PROJECT_DIR --dockerfile $CI_PROJECT_DIR/Dockerfile --destination $IMAGE_TAG
+
+deploy:
+  stage: deploy
+  image: portainer/kubectl-shell
+  before_script:
+    - if [ -e .nodockerfile ]; then echo "File .nodockerfile exists, skipping this job." && exit 0; fi;
+  script:
+    - kubectl config set-cluster rancher-cluster --server=$KUB_URL --insecure-skip-tls-verify=true
+    - kubectl config set-credentials pipelines-user --token=$KUB_TOKEN
+    - kubectl config set-context rancher-context --cluster=rancher-cluster --user=pipelines-user
+    - kubectl config use-context rancher-context
+    - kubectl -n $NAMESPACE apply -R -f k8s/dev/
+    - kubectl -n $NAMESPACE rollout restart deployment $APP_NAME
+  only:
+    - master
